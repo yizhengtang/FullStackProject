@@ -1,0 +1,87 @@
+PROMPT FOR AVBVD TRADING STRATEGY BACKTESTING SYSTEM
+=====================================================
+
+Create a Python stock trading backtesting system for educational purposes that tests the "Adaptive Volatility Breakout with Volume Divergence" (AVBVD) strategy on 25 years of S&P 500 daily stock data from 2000 to 2024. This is a university assignment demonstrating Level 3 programming where English prompts generate complete code.
+
+DOCUMENTATION
+Include a header comment documenting this prompt and educational disclaimers stating this is for learning only and should never be used for real trading.
+
+DATA INPUT
+Read CSV files from a "stocks" folder where each file like AAPL.csv contains columns: Date, Open, High, Low, Close, Volume. Load all files into a dictionary mapping ticker symbols to pandas DataFrames sorted chronologically.
+
+STRATEGY IMPLEMENTATION
+
+Component 1: Dynamic Volatility Channels
+Calculate True Range as max of: High-Low, |High-PrevClose|, |Low-PrevClose|. Compute Average True Range (ATR) as rolling mean over 20 days. Calculate True Range Expansion Ratio = TrueRange/ATR. Mark volatility as expanding when ratio exceeds 1.8 and contracting when below 1/1.8. Create volatility channels at Close ± (ATR × 2.0). Calculate where price sits in channel from 0 to 1.
+
+Component 2: Volume-Price Momentum Divergence
+Calculate Volume Velocity as percent change in volume over 10 days. Calculate Price Momentum as percent change in price over same period. Calculate Volume Acceleration as change in Volume Velocity. Detect Accumulation when volume velocity exceeds 0.25 but price momentum is below 0.25. Detect Distribution when volume velocity is below -0.25 but price momentum exceeds 0.25.
+
+Component 3: Gap Sentiment Analysis
+Calculate Overnight Gap as (Open - PrevClose) / PrevClose. Calculate Gap Fill Ratio as (Close - Open) / Gap. Create Gap Momentum Score as weighted average of last 5 gaps with recent gaps weighted higher. Detect Gap Extension when ratio exceeds 0.4. Detect Gap Reversal when ratio below -0.4. Track if Gap Momentum is positive above 0.01 or negative below -0.01.
+
+Component 4: Intraday Range Efficiency
+Calculate Daily Range = High - Low. Calculate Directional Move = |Close - Open|. Calculate Range Efficiency = Directional Move / Daily Range. Compute average efficiency over 3 days. Mark as high efficiency when average exceeds 0.65. Track if efficiency is increasing compared to previous period.
+
+SIGNAL GENERATION
+BUY when at least 3 of these 5 conditions are true: volatility expanding, accumulation detected, positive gap momentum AND gap extending, high efficiency AND efficiency increasing, price in lower 25% of channel.
+
+SELL when at least 3 of these 5 conditions are true: volatility contracting, distribution detected, negative gap momentum OR gap reversing, low efficiency OR efficiency decreasing, price in upper 75% of channel.
+
+TRADING RULES
+Hold only ONE position at any time. Each day, if no position is held, scan all stocks and buy the one with most buy conditions met. If a position is held, monitor it for exit conditions. Support three position sizing methods: equal weight using all cash, all-in using all cash, or volatility-adjusted using inverse volatility weighting where higher volatility stocks get smaller positions. Default to volatility-adjusted. Allow fractional shares.
+
+RISK MANAGEMENT
+Check daily in order: Stop Loss at -8% loss, Take Profit at 15% gain, Maximum Holding Period at 30 days forces exit, Minimum Holding Period at 5 days prevents early exits except for risk rules. Track transaction costs at 0% of trade value on buys and sells.
+
+MULTI-YEAR BACKTESTING
+Process each year from 2000-2024 independently. For each year: start with fresh portfolio of $100, filter data to that year only, calculate all indicators and signals for each stock, process dates chronologically executing trades, close open positions at year-end, save outputs, reset portfolio for next year.
+
+CONFIGURATION PARAMETERS
+Create a configuration section with these variables: STARTING_CAPITAL = 100.00, POSITION_SIZE_METHOD = 'volatility_adjusted', MAX_POSITION_SIZE = 1.0, TRANSACTION_COST_PERCENT = 0.0, ALLOW_FRACTIONAL_SHARES = True, VOLATILITY_LOOKBACK = 20, VOLATILITY_THRESHOLD = 1.8, VOLATILITY_CHANNEL_WIDTH = 2.0, VOLUME_VELOCITY_PERIOD = 10, VOLUME_DIVERGENCE_THRESHOLD = 0.25, GAP_MOMENTUM_WINDOW = 5, GAP_EXTENSION_THRESHOLD = 0.4, EFFICIENCY_THRESHOLD = 0.65, EFFICIENCY_WINDOW = 3, STOP_LOSS_PERCENT = -0.08, TAKE_PROFIT_PERCENT = 0.15, MIN_HOLDING_PERIOD = 5, MAX_HOLDING_PERIOD = 30, POSITION_CHANNEL_THRESHOLD = 0.25, OUTPUT_FOLDER = "output", CHARTS_FOLDER_PREFIX = "output/charts", MAX_CHARTS_PER_YEAR = 20, STOCKS_FOLDER = "stocks".
+
+OUTPUT REQUIREMENTS
+
+CSV Output
+For each year create trades_YEAR.csv with columns: Ticker, Buy Date, Buy Price, Shares, Buy Amount ($), Sell Date, Sell Price, Sell Amount ($), Profit ($), Percentage Profit, Transaction Cost ($), Exit Reason.
+
+Excel Output
+For each year create trades_YEAR.xlsx with three sheets:
+Sheet 1 "Trades": Same columns as CSV
+Sheet 2 "Summary": Year, Starting Capital, Final Portfolio Value, Total Return ($), Total Return (%), Total Trades, Winning Trades, Losing Trades, Win Rate (%), Average Profit ($), Average Profit (%), Transaction Costs, Best Trade (%), Worst Trade (%)
+Sheet 3 "Portfolio History": Date, Cash, Position Value, Portfolio Value showing daily progression
+
+Chart Output
+For top 20 trades by absolute profit percentage, create PNG charts with 5 vertically-stacked panels:
+Panel 1: Close price with volatility channel shaded, all buy signals as green up-triangles, all sell signals as red down-triangles, vertical dashed lines at this trade's buy and sell dates
+Panel 2: Volume bars on left axis, Volume Velocity orange line on right axis, horizontal threshold lines
+Panel 3: Gap Momentum purple line, positive areas green, negative areas red, threshold lines
+Panel 4: Average Efficiency brown line, threshold line, area above threshold green
+Panel 5: Position value for this trade only, horizontal lines at buy/sell amounts, profit green, loss red
+Save as YEAR_TICKER_profit_X.Xpct.png in charts_YEAR folder.
+
+Yearly Summary
+After all years create yearly_summary.csv comparing all years with columns: Year, Starting Capital, Final Portfolio Value, Total Return ($), Total Return (%), Total Trades, Win Rate (%), Avg Profit Per Trade (%), Best Trade (%), Worst Trade (%).
+
+Console Output
+Print overall statistics: total years, average/median annual return, best/worst years with returns, total trades, average win rate, cumulative compounded return showing starting capital, final value, and return percentage.
+
+CODE STRUCTURE
+Create AVBVDStrategy class with methods: calculate_indicators, _calculate_volatility_channels, _calculate_volume_divergence, _calculate_gap_sentiment, _calculate_range_efficiency, generate_signals.
+
+Create PortfolioManager class with methods: __init__, has_position, calculate_position_size, buy, sell, update_portfolio_value, check_risk_management.
+
+Create BacktestEngine class with methods: __init__, run_backtest, _calculate_summary.
+
+Create functions: load_stock_data, save_trades_csv, save_trades_excel, generate_charts, run_multi_year_backtest.
+
+Main execution block wraps run_multi_year_backtest in try-except handling KeyboardInterrupt and general exceptions.
+
+ERROR HANDLING
+Handle division by zero with numpy.where and fallback values. Skip stocks without sufficient data. Wrap file operations in try-except with warnings. Print progress showing current date of total dates. Use 70 equals signs for section separators.
+
+LIBRARIES
+Import pandas, numpy, matplotlib.pyplot, Path from pathlib, warnings, datetime, openpyxl, Dict/List/Optional from typing, sys.
+
+EXPECTED BEHAVIOR
+Generate 30-60 trades per year. Capture volatility breakouts confirmed by volume. Multi-factor confirmation reduces false signals. Charts show clear visual patterns. Single-threaded trading is realistic. Volatility-adjusted sizing normalizes risk.

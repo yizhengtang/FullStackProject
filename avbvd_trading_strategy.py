@@ -48,9 +48,9 @@ warnings.filterwarnings('ignore')
 
 # Portfolio Configuration
 STARTING_CAPITAL = 100.00
-POSITION_SIZE_METHOD = 'equal_weight'  # 'equal_weight', 'volatility_adjusted', 'all_in'
-MAX_POSITION_SIZE = 0.20  # 20% of portfolio
-TRANSACTION_COST_PERCENT = 0.001  # 0.1%
+POSITION_SIZE_METHOD = 'volatility_adjusted'  # 'equal_weight', 'volatility_adjusted', 'all_in'
+MAX_POSITION_SIZE = 1  # 100% of portfolio
+TRANSACTION_COST_PERCENT = 0  # 0%
 ALLOW_FRACTIONAL_SHARES = True
 
 # Volatility Parameters
@@ -84,6 +84,13 @@ POSITION_CHANNEL_THRESHOLD = 0.25  # Buy in lower 25%, sell in upper 25%
 REQUIRE_VOLUME_CONFIRMATION = True
 REQUIRE_GAP_CONFIRMATION = True
 REQUIRE_EFFICIENCY_CONFIRMATION = True
+
+# Backtest Year Configuration
+# Set to None to use default (most recent 10 years: 2014-2024)
+# Set to a single year (e.g., 2024) to backtest only that year
+# Set to a list of years (e.g., [2020, 2021, 2022]) to backtest specific years
+# Set to a tuple (start, end) (e.g., (2000, 2024)) to backtest a range
+BACKTEST_YEARS = None  # None = default to most recent 10 years (2014-2024)
 
 # Output Configuration
 OUTPUT_FOLDER = "output"
@@ -1200,13 +1207,199 @@ def generate_charts(trades: List[Dict], stock_data: Dict[str, pd.DataFrame],
     print(f"Charts saved to {charts_path}")
 
 
+def save_summary_txt(yearly_summaries: List[Dict], years: List[int],
+                    output_folder: str = OUTPUT_FOLDER):
+    """
+    Save a comprehensive summary text file with all backtest results
+
+    Args:
+        yearly_summaries: List of summary dictionaries for each year
+        years: List of years that were backtested
+        output_folder: Folder to save the summary file
+    """
+    output_path = Path(output_folder)
+    output_path.mkdir(exist_ok=True)
+
+    summary_file = output_path / "summary.txt"
+
+    with open(summary_file, 'w') as f:
+        # Header
+        f.write("=" * 70 + "\n")
+        f.write("ADAPTIVE VOLATILITY BREAKOUT WITH VOLUME DIVERGENCE (AVBVD)\n")
+        f.write("BACKTESTING SUMMARY REPORT\n")
+        f.write("=" * 70 + "\n\n")
+
+        f.write("EDUCATIONAL DISCLAIMER:\n")
+        f.write("This is for educational purposes ONLY. Not for real trading.\n")
+        f.write("Past performance does not guarantee future results.\n")
+        f.write("=" * 70 + "\n\n")
+
+        # Configuration Summary
+        f.write("CONFIGURATION PARAMETERS:\n")
+        f.write("-" * 70 + "\n")
+        f.write(f"Starting Capital:           ${STARTING_CAPITAL:.2f}\n")
+        f.write(f"Position Sizing Method:     {POSITION_SIZE_METHOD}\n")
+        f.write(f"Stop Loss:                  {STOP_LOSS_PERCENT*100:.1f}%\n")
+        f.write(f"Take Profit:                {TAKE_PROFIT_PERCENT*100:.1f}%\n")
+        f.write(f"Min Holding Period:         {MIN_HOLDING_PERIOD} days\n")
+        f.write(f"Max Holding Period:         {MAX_HOLDING_PERIOD} days\n")
+        f.write(f"Volatility Threshold:       {VOLATILITY_THRESHOLD}\n")
+        f.write(f"Volume Divergence Thresh:   {VOLUME_DIVERGENCE_THRESHOLD}\n")
+        f.write(f"Efficiency Threshold:       {EFFICIENCY_THRESHOLD}\n")
+        f.write("=" * 70 + "\n\n")
+
+        # Years Backtested
+        f.write("YEARS BACKTESTED:\n")
+        f.write("-" * 70 + "\n")
+        f.write(f"Years: {min(years)} to {max(years)}\n")
+        f.write(f"Total Years: {len(years)}\n")
+        f.write(f"Year List: {years}\n")
+        f.write("=" * 70 + "\n\n")
+
+        if len(yearly_summaries) == 0:
+            f.write("No trades were executed during the backtest period.\n")
+            return
+
+        # Yearly Results Table
+        f.write("YEARLY RESULTS:\n")
+        f.write("-" * 70 + "\n")
+        f.write(f"{'Year':<8} {'Return %':<12} {'Trades':<10} {'Win Rate':<12} {'Final Value':<15}\n")
+        f.write("-" * 70 + "\n")
+
+        for summary in yearly_summaries:
+            f.write(f"{summary['year']:<8} "
+                   f"{summary['total_return_pct']:>10.2f}%  "
+                   f"{summary['total_trades']:<10} "
+                   f"{summary['win_rate']:>10.2f}%  "
+                   f"${summary['final_value']:>12.2f}\n")
+
+        f.write("=" * 70 + "\n\n")
+
+        # Overall Statistics
+        summary_df = pd.DataFrame(yearly_summaries)
+
+        f.write("OVERALL STATISTICS:\n")
+        f.write("-" * 70 + "\n")
+        f.write(f"Total Years Processed:      {len(summary_df)}\n")
+        f.write(f"Average Annual Return:      {summary_df['total_return_pct'].mean():.2f}%\n")
+        f.write(f"Median Annual Return:       {summary_df['total_return_pct'].median():.2f}%\n")
+        f.write(f"Standard Deviation:         {summary_df['total_return_pct'].std():.2f}%\n")
+        f.write(f"Total Trades (All Years):   {int(summary_df['total_trades'].sum())}\n")
+        f.write(f"Average Win Rate:           {summary_df['win_rate'].mean():.2f}%\n")
+        f.write(f"Average Profit Per Trade:   {summary_df['avg_profit_pct'].mean():.2f}%\n")
+        f.write("=" * 70 + "\n\n")
+
+        # Best and Worst Years
+        best_year = summary_df.loc[summary_df['total_return_pct'].idxmax()]
+        worst_year = summary_df.loc[summary_df['total_return_pct'].idxmin()]
+
+        f.write("BEST & WORST YEARS:\n")
+        f.write("-" * 70 + "\n")
+        f.write(f"Best Year:    {int(best_year['year'])} "
+               f"({best_year['total_return_pct']:.2f}% return, "
+               f"{int(best_year['total_trades'])} trades)\n")
+        f.write(f"Worst Year:   {int(worst_year['year'])} "
+               f"({worst_year['total_return_pct']:.2f}% return, "
+               f"{int(worst_year['total_trades'])} trades)\n")
+        f.write("=" * 70 + "\n\n")
+
+        # Cumulative Performance
+        cumulative_multiplier = 1.0
+        for ret in summary_df['total_return_pct']:
+            cumulative_multiplier *= (1 + ret / 100)
+
+        cumulative_return = (cumulative_multiplier - 1) * 100
+        final_value = STARTING_CAPITAL * cumulative_multiplier
+
+        f.write("CUMULATIVE PERFORMANCE (Compounded):\n")
+        f.write("-" * 70 + "\n")
+        f.write(f"Starting Capital:           ${STARTING_CAPITAL:.2f}\n")
+        f.write(f"Final Value:                ${final_value:.2f}\n")
+        f.write(f"Cumulative Return:          {cumulative_return:.2f}%\n")
+        f.write(f"Annualized Return:          {((cumulative_multiplier ** (1/len(years))) - 1) * 100:.2f}%\n")
+        f.write("=" * 70 + "\n\n")
+
+        # Trade Statistics by Year
+        f.write("DETAILED TRADE STATISTICS BY YEAR:\n")
+        f.write("-" * 70 + "\n")
+
+        for summary in yearly_summaries:
+            f.write(f"\n{summary['year']}:\n")
+            f.write(f"  Total Return:          {summary['total_return_pct']:>8.2f}%  "
+                   f"(${summary['total_return']:>8.2f})\n")
+            f.write(f"  Total Trades:          {summary['total_trades']:>8}\n")
+            f.write(f"  Winning Trades:        {summary['winning_trades']:>8}\n")
+            f.write(f"  Losing Trades:         {summary['losing_trades']:>8}\n")
+            f.write(f"  Win Rate:              {summary['win_rate']:>8.2f}%\n")
+            f.write(f"  Avg Profit/Trade:      {summary['avg_profit_pct']:>8.2f}%  "
+                   f"(${summary['avg_profit']:>8.2f})\n")
+            f.write(f"  Best Trade:            {summary['best_trade_pct']:>8.2f}%\n")
+            f.write(f"  Worst Trade:           {summary['worst_trade_pct']:>8.2f}%\n")
+            f.write(f"  Transaction Costs:     ${summary['total_transaction_costs']:>8.2f}\n")
+
+        f.write("\n" + "=" * 70 + "\n")
+        f.write("END OF REPORT\n")
+        f.write("=" * 70 + "\n")
+
+    print(f"\nSaved summary report to {summary_file}")
+
+
 # =============================================================================
 # MULTI-YEAR BACKTESTING
 # =============================================================================
 
+def determine_years_to_backtest(stock_data: Dict[str, pd.DataFrame]) -> List[int]:
+    """
+    Determine which years to backtest based on BACKTEST_YEARS configuration
+
+    Args:
+        stock_data: Dict mapping ticker to DataFrame
+
+    Returns:
+        List of years to backtest
+    """
+    # Get all available years from data
+    all_years = set()
+    for df in stock_data.values():
+        all_years.update(df['Date'].dt.year.unique())
+
+    available_years = sorted(all_years)
+
+    if BACKTEST_YEARS is None:
+        # Default: most recent 10 years (2014-2024)
+        recent_10_years = [y for y in available_years if y >= 2014 and y <= 2024]
+        return recent_10_years if recent_10_years else available_years[-10:]
+
+    elif isinstance(BACKTEST_YEARS, int):
+        # Single year
+        if BACKTEST_YEARS in available_years:
+            return [BACKTEST_YEARS]
+        else:
+            print(f"Warning: Year {BACKTEST_YEARS} not found in data. No years to process.")
+            return []
+
+    elif isinstance(BACKTEST_YEARS, list):
+        # List of specific years
+        valid_years = [y for y in BACKTEST_YEARS if y in available_years]
+        if len(valid_years) < len(BACKTEST_YEARS):
+            missing = set(BACKTEST_YEARS) - set(valid_years)
+            print(f"Warning: Years {missing} not found in data.")
+        return sorted(valid_years)
+
+    elif isinstance(BACKTEST_YEARS, tuple) and len(BACKTEST_YEARS) == 2:
+        # Range of years (start, end) inclusive
+        start_year, end_year = BACKTEST_YEARS
+        range_years = [y for y in available_years if start_year <= y <= end_year]
+        return range_years
+
+    else:
+        print(f"Warning: Invalid BACKTEST_YEARS format. Using all available years.")
+        return available_years
+
+
 def run_multi_year_backtest():
     """
-    Main function to run backtests across all years (2000-2024)
+    Main function to run backtests across configured years
 
     For each year:
     - Initialize fresh portfolio
@@ -1217,10 +1410,11 @@ def run_multi_year_backtest():
     After all years:
     - Generate yearly summary comparison
     - Display overall statistics
+    - Save summary.txt file
     """
     print("\n" + "="*70)
     print("ADAPTIVE VOLATILITY BREAKOUT WITH VOLUME DIVERGENCE (AVBVD)")
-    print("Multi-Year Backtesting System (2000-2024)")
+    print("Multi-Year Backtesting System")
     print("="*70)
     print("\nEDUCATIONAL DISCLAIMER:")
     print("This is for educational purposes ONLY. Not for real trading.")
@@ -1230,14 +1424,16 @@ def run_multi_year_backtest():
     # Load all stock data
     stock_data = load_stock_data()
 
-    # Determine year range from data
-    all_years = set()
-    for df in stock_data.values():
-        all_years.update(df['Date'].dt.year.unique())
+    # Determine which years to backtest
+    years = determine_years_to_backtest(stock_data)
 
-    years = sorted(all_years)
-    print(f"\nFound data for years: {min(years)} to {max(years)}")
+    if not years:
+        print("\nNo years to process. Check BACKTEST_YEARS configuration.")
+        return
+
+    print(f"\nYears to backtest: {min(years)} to {max(years)}")
     print(f"Total years to process: {len(years)}")
+    print(f"Years: {years}")
 
     # Run backtest for each year
     yearly_summaries = []
@@ -1320,6 +1516,9 @@ def run_multi_year_backtest():
         print(f"\n{'='*70}")
         print("BACKTESTING COMPLETE")
         print(f"{'='*70}\n")
+
+        # Save summary.txt file
+        save_summary_txt(yearly_summaries, years)
 
     else:
         print("\nNo data was processed. Check your stocks folder and data files.")
